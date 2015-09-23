@@ -1,0 +1,145 @@
+---
+title: "Practical Machine Learning - Project Report"
+date: "Thursday, September 24, 2015"
+output: html_document
+---
+
+**BACKGROUND**
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement, a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+1. Your submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. 
+2. You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details. 
+
+**R Libraries**
+
+To do this, the following R libraries were loaded:
+
+```{r message=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(rattle)
+```
+
+For reproduceability, the following seed was set:
+```{r}
+set.seed(2015)
+```
+
+**Sourcing the Data**
+
+The training and testing sets of data were sourced from the following URLs:
+
+```{r message=FALSE}
+
+TrainingSource <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+TestingSource <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+```
+
+The underlying data was then loaded using the following code:
+
+```{r results='hide', message=FALSE}
+training <- read.csv(url(TrainingSource))
+testing <- read.csv(url(TestingSource))
+
+dim(training)
+dim(testing)
+
+```
+
+The training data set contains 19622 observations and 160 variables with the "classe" variable the outcome to predict but the testing data set contains only 20 observations, this will require the training set to be partitioned to create a testing subset after the cleaning process.     
+
+**Cleaning the Data*
+
+The first data cleansing process involved identifying and removing columns with a high number of NAs.  This reduced the number of variables from 160 to 93 in training and derived testing sets and 60 in original testing set.
+
+```{r results='hide', message=FALSE}
+training <- training[, colSums(is.na(training)) < 0.1] 
+testing <- testing[, colSums(is.na(testing)) < 0.1] 
+
+dim(training)
+dim(testing)
+```
+
+The second process is to identify columns with near zero variance so they can be removed to improve calculation speed without reducing model accuracy.  
+
+```{r results='hide', message=FALSE}
+nsv <- nearZeroVar(training, saveMetrics=TRUE)
+nsv
+
+```
+
+34 variables were identified where near zero variance (nsv) is TRUE.  These were eliminated, using the code below, resulting in 59 variables being available for the modelling process.
+
+```{r message=FALSE}
+NZVvars <- names(training) %in% c("new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
+"kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
+"max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "kurtosis_roll_arm", "kurtosis_picth_arm",
+"kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
+"kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
+"skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
+"amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
+"skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_yaw_forearm", "min_yaw_forearm", "amplitude_yaw_forearm")
+
+training <- training[!NZVvars]
+
+dim(training)
+
+```
+
+**Partitioning the Data**
+
+Once the training data set had been cleaned, it was partitioned 70:30 to create a validation set.
+
+```{r results='hide', message=FALSE}
+
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+NewTraining <- training[inTrain, ]
+NewTesting <- training[-inTrain, ]
+
+dim(NewTraining)
+dim(NewTesting)
+
+```
+
+
+**Creating the Model*
+
+The Random Forest algorithm was used to create the model due to the high level of accuracy it delivers.  5-fold cross validation was used when applying the algorithm.
+
+```{r results='hide', message=FALSE}
+control <- trainControl(method="cv", 5)
+model <- train(classe ~ ., data=NewTraining, method="rf", trControl=control, ntree=250)
+model
+```
+
+The performance of the model was tested on the validation set derived.
+
+```{r results='hide', message=FALSE}
+predict <- predict(model, NewTesting)
+confusionMatrix(NewTesting$classe, predict)
+```
+
+```{r results='hide', message=FALSE}
+accuracy <- postResample(predict, NewTesting$classe)
+accuracy
+oose <- 1 - as.numeric(confusionMatrix(NewTesting$classe, predict)$overall[1])
+oose
+
+```
+
+So, the estimated accuracy of the model is 99.98% and the estimated out-of-sample error is 0.02%.
+
+**Running Model on Original Test Data*
+
+The model was then applied to the original testing set.
+
+```{r results='hide', message=FALSE}
+result <- predict(model, testing[, -length(names(testing))])
+result
+
+```
